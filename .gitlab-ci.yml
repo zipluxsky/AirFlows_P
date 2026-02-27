@@ -1,35 +1,48 @@
 # GitLab CI/CD: deploy Airflow using official Docker image (no SSH).
-# Runner: Shell executor on the same machine as deploy target. Runner 需已安裝 Docker 且可執行 docker compose.
+# 僅限 Shell executor：job 在 Runner 主機的 shell 直接執行，不使用 Docker executor / dind。
+# 使用 Docker 命名 volume 存放 dags/logs/config/plugins，不需在 host 上 mkdir。
+# Runner 主機需已安裝 Docker 且可執行 docker compose（sudo docker / docker compose）。
 
 default:
   tags:
     - Docker-FIX
+  # Shell executor：不指定 image，在 runner 本機執行
 
 stages:
   - permission_test
   - deploy
 
 variables:
-  DEPLOY_PATH: "/opt/airflow"  # 本機部署目錄（Runner 與部署目標同一台時使用）
+  # 從 repo 目錄執行 deploy，docker-compose 使用 named volumes，無需 host 目錄權限
+  DEPLOY_PATH: "${CI_PROJECT_DIR}"
 
 permission_test:
   stage: permission_test
   script:
-    - sudo -n true
+    # 基本 Docker 與 Compose 可用性
     - sudo docker ps
     - sudo docker compose version
+    # Volume 權限：建立、掛載、寫入、刪除
+    - |
+      VOL_NAME="ci_perm_test_$$"
+      sudo docker volume create "$VOL_NAME"
+      sudo docker run --rm -v "${VOL_NAME}:/data" alpine touch /data/ok
+      sudo docker run --rm -v "${VOL_NAME}:/data" alpine test -f /data/ok
+      sudo docker volume rm "$VOL_NAME"
+    # 確認可從當前目錄執行 compose（不需 mkdir）
+    - cd "${CI_PROJECT_DIR}" && test -f docker-compose.yml && sudo docker compose config --quiet
   only:
-    - main
+    - master
 
 .deploy_base:
   stage: deploy
   before_script:
-    - sudo mkdir -p "${DEPLOY_PATH}/dags" "${DEPLOY_PATH}/logs" "${DEPLOY_PATH}/config" "${DEPLOY_PATH}/plugins"
-    - sudo cp docker-compose.yml "${DEPLOY_PATH}/"
+    - cd "${DEPLOY_PATH}"
+    - test -f docker-compose.yml
 
 deploy:
   extends: .deploy_base
   script:
     - cd "${DEPLOY_PATH}" && sudo docker compose pull && sudo docker compose up -d
   only:
-    - main
+    - master
