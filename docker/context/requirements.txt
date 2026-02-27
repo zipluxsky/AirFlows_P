@@ -1,3 +1,0 @@
-# 可選：自訂 PyPI 依賴，建置時加上 --build-arg DOCKER_CONTEXT_FILES=docker/context
-# 例如：
-# apache-airflow-providers-http

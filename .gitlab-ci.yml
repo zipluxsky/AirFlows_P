@@ -1,0 +1,35 @@
+# GitLab CI/CD: deploy Airflow using official Docker image (no SSH).
+# Runner: Shell executor on the same machine as deploy target. Runner 需已安裝 Docker 且可執行 docker compose.
+
+default:
+  tags:
+    - Docker-FIX
+
+stages:
+  - permission_test
+  - deploy
+
+variables:
+  DEPLOY_PATH: "/opt/airflow"  # 本機部署目錄（Runner 與部署目標同一台時使用）
+
+permission_test:
+  stage: permission_test
+  script:
+    - sudo -n true
+    - sudo docker ps
+    - sudo docker compose version
+  only:
+    - main
+
+.deploy_base:
+  stage: deploy
+  before_script:
+    - sudo mkdir -p "${DEPLOY_PATH}/dags" "${DEPLOY_PATH}/logs" "${DEPLOY_PATH}/config" "${DEPLOY_PATH}/plugins"
+    - sudo cp docker-compose.yml "${DEPLOY_PATH}/"
+
+deploy:
+  extends: .deploy_base
+  script:
+    - cd "${DEPLOY_PATH}" && sudo docker compose pull && sudo docker compose up -d
+  only:
+    - main
