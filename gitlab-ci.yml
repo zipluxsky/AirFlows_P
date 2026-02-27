@@ -1,0 +1,49 @@
+# GitLab CI：shell executor、無 Registry（見 docs/IMPLEMENTATION_PLAN.md 五）
+# 建置與執行需在同一台 shell runner（tags 一致）；若 Runner 不在 docker 群組則須具備無密碼 sudo docker
+
+stages:
+  - build
+  - integration
+
+variables:
+  AIRFLOW_IMAGE_TAG: "${CI_COMMIT_SHA}"
+  AIRFLOW_IMAGE: "airflow:${CI_COMMIT_SHA}"
+
+# Stage 1: 建置映像（方案 A1：下載 Dockerfile 後 build）
+# 下載 Dockerfile 的 ref 與建置版本一致，避免 main 與 3.2.0 混用
+build:
+  stage: build
+  tags:
+    - shell
+  script:
+    - export AIRFLOW_VERSION="${AIRFLOW_VERSION:-3.2.0}"
+    - export AIRFLOW_DOCKERFILE_REF="${AIRFLOW_VERSION}"
+    - ./scripts/download-dockerfile.sh
+    - export AIRFLOW_IMAGE_TAG="${CI_COMMIT_SHA}"
+    - ./scripts/build.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Stage 2: 整合測試（啟動 → 健康檢查 → 停止）
+integration:
+  stage: integration
+  tags:
+    - shell
+  variables:
+    AIRFLOW_IMAGE: "airflow:${CI_COMMIT_SHA}"
+  script:
+    - export DOCKER_CMD=$(groups | grep -qw docker && echo docker || echo 'sudo docker')
+    - export AIRFLOW_IMAGE="airflow:${CI_COMMIT_SHA}"
+    - ./scripts/start-airflow.sh
+    - |
+      for i in $(seq 1 30); do
+        curl -sf http://localhost:8080/health && break
+        sleep 2
+      done
+    - $DOCKER_CMD run --rm --network airflow-net "${AIRFLOW_IMAGE}" airflow dags list
+  after_script:
+    - ./scripts/stop-airflow.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - build

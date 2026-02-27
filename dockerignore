@@ -1,0 +1,11 @@
+# 排除無用檔案，縮小 build context（見 docs/IMPLEMENTATION_PLAN.md 2.4）
+.git/
+.cursor/
+*.md
+docs/
+*.log
+.env
+.env.*
+__pycache__/
+.gitignore
+.DS_Store
