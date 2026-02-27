@@ -47,8 +47,8 @@ ARG AIRFLOW_IMAGE_TYPE="prod"
 ARG AIRFLOW_UID="50000"
 ARG AIRFLOW_USER_HOME_DIR=/home/airflow
 
-# latest released version here
-ARG AIRFLOW_VERSION="3.1.7"
+# latest released version here（與 scripts/build.sh 預設一致；CI 會先下載覆寫此檔）
+ARG AIRFLOW_VERSION="3.2.0"
 
 ARG BASE_IMAGE="debian:bookworm-slim"
 ARG AIRFLOW_PYTHON_VERSION="3.12.12"

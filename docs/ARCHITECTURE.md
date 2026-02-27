@@ -7,7 +7,7 @@
 ## 一、概述與目標
 
 - **目標**：從 Apache Airflow 源碼或指定版本建置自訂 Docker 映像，以**多個獨立容器**運行（不使用 docker-compose），並以 GitLab CI 做建置與整合測試。
-- **約束**：GitLab 使用 **shell executor**、**不推送至 Container Registry**；建置與執行在同一台 Runner 主機完成。
+- **約束**：GitLab 使用 **shell executor**、**不推送至 Container Registry**；建置與執行在同一台 Runner 主機完成。**Docker**：若使用者在 **docker 群組**則直接執行 `docker`，**否則以 `sudo docker` 執行**。
 - **自建映像**：僅 **1 個** Airflow 映像，供 scheduler、webserver、worker、flower 共用；PostgreSQL 與 Redis 使用官方映像。
 
 ---
@@ -143,9 +143,9 @@ DAG 目錄由 `DAGS_MOUNT` 決定（預設 `$PROJECT_ROOT/dags`）；CI 中會�
 
 - **觸發**：Merge Request 時（`rules: if: $CI_PIPELINE_SOURCE == "merge_request_event"`）。
 - **Stages**：
-  1. **build**：下載 Dockerfile → 執行 `scripts/build.sh`，tag 為 `airflow:${CI_COMMIT_SHA}`。
-  2. **integration**：`scripts/start-airflow.sh` → 輪詢 http://localhost:8080/health → 執行 `airflow dags list` → `after_script` 執行 `scripts/stop-airflow.sh`。
-- **Runner**：需使用 **shell executor**、具 Docker 權限；build 與 integration 須在同一台（相同 `tags: [shell]`），不推送映像至 Registry。
+  1. **build**：下載 Dockerfile → 執行 `scripts/build.sh`（內含 `sudo docker build`），tag 為 `airflow:${CI_COMMIT_SHA}`。
+  2. **integration**：`scripts/start-airflow.sh`（內含 `sudo docker run` 等）→ 輪詢 http://localhost:8080/health → 執行 `sudo docker run ... airflow dags list` → `after_script` 執行 `scripts/stop-airflow.sh`。
+- **Runner**：需使用 **shell executor**；Runner 在 docker 群組則直接跑 `docker`，否則須具備**無密碼 `sudo docker`**；build 與 integration 須在同一台（相同 `tags: [shell]`），不推送映像至 Registry。
 
 ---
 
@@ -157,6 +157,6 @@ DAG 目錄由 `DAGS_MOUNT` 決定（預設 `$PROJECT_ROOT/dags`）；CI 中會�
 | DAG 更新 | 僅更新 `dags/` 檔案，不需重建映像 |
 | 執行模式 | LocalExecutor（預設）或 CeleryExecutor（需 Redis + worker + flower） |
 | 部署方式 | Shell 腳本起停，無 docker-compose |
-| CI | 單一 pipeline：build → integration，MR 觸發，shell runner、無 Registry |
+| CI | 單一 pipeline：build → integration，MR 觸發，shell runner、無 Registry；**Docker 依是否在 docker 群組決定是否加 sudo** |
 
 更細的建置步驟、檢查表與風險見 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。

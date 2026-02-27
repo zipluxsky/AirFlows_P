@@ -2,6 +2,9 @@
 # 封裝 docker build，供本機與 CI 使用（見 docs/IMPLEMENTATION_PLAN.md 2.2 / 2.3）
 set -e
 
+# 若在 docker 群組則不用 sudo，否則用 sudo 執行 docker
+if groups | grep -qw docker; then DOCKER_CMD="docker"; else DOCKER_CMD="sudo docker"; fi
+
 : "${AIRFLOW_VERSION:=3.2.0}"
 : "${AIRFLOW_IMAGE_TAG:=${AIRFLOW_VERSION}-custom}"
 : "${BUILD_MODE:=A1}"
@@ -26,7 +29,7 @@ if [[ "$BUILD_MODE" == "source" ]]; then
   if [[ -n "${AIRFLOW_SOURCE_DIR:-}" ]]; then
     cd "$AIRFLOW_SOURCE_DIR"
   fi
-  docker build "${PLATFORM_EXTRA[@]}" -f Dockerfile \
+  $DOCKER_CMD build "${PLATFORM_EXTRA[@]}" -f Dockerfile \
     --build-arg AIRFLOW_INSTALLATION_METHOD=. \
     --build-arg AIRFLOW_SOURCES_FROM=. \
     --build-arg AIRFLOW_SOURCES_TO=/opt/airflow \
@@ -47,7 +50,7 @@ else
     -t "airflow:${AIRFLOW_IMAGE_TAG}"
   )
   [[ -d docker/context ]] && BUILD_ARGS+=(--build-arg DOCKER_CONTEXT_FILES=docker/context)
-  docker build "${PLATFORM_EXTRA[@]}" "${BUILD_ARGS[@]}" .
+  $DOCKER_CMD build "${PLATFORM_EXTRA[@]}" "${BUILD_ARGS[@]}" .
 fi
 
 echo "Built image: airflow:${AIRFLOW_IMAGE_TAG}"

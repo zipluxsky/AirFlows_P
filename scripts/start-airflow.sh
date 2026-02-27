@@ -3,6 +3,9 @@
 # 見 docs/IMPLEMENTATION_PLAN.md 四
 set -e
 
+# 若在 docker 群組則不用 sudo，否則用 sudo 執行 docker
+if groups | grep -qw docker; then DOCKER_CMD="docker"; else DOCKER_CMD="sudo docker"; fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
@@ -24,6 +27,11 @@ cd "$PROJECT_ROOT"
 : "${CELERY_RESULT_BACKEND:=db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${AIRFLOW_DB_CONTAINER}:5432/${POSTGRES_DB}}"
 : "${DAGS_MOUNT:=$PROJECT_ROOT/dags}"
 
+# 若未設定 executor 且存在範例設定，提示可 source 以使用 Celery 或自訂設定
+if [[ -z "${AIRFLOW__CORE__EXECUTOR:-}" && -f "$PROJECT_ROOT/config/env.example" ]]; then
+  echo "Tip: To use CeleryExecutor or custom DB, run: source config/env.example"
+fi
+
 # 若在 CI 中，可用 $CI_PROJECT_DIR
 if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
   DAGS_MOUNT="${CI_PROJECT_DIR}/dags"
@@ -39,10 +47,10 @@ if [[ "$EXECUTOR" == "CeleryExecutor" ]]; then
 fi
 
 # 1. 建立 network
-docker network inspect "$AIRFLOW_NETWORK" &>/dev/null || docker network create "$AIRFLOW_NETWORK"
+$DOCKER_CMD network inspect "$AIRFLOW_NETWORK" &>/dev/null || $DOCKER_CMD network create "$AIRFLOW_NETWORK"
 
 # 2. 啟動 PostgreSQL（metadata-db）
-docker run -d --rm \
+$DOCKER_CMD run -d --rm \
   --name "$AIRFLOW_DB_CONTAINER" \
   --network "$AIRFLOW_NETWORK" \
   -e POSTGRES_USER="$POSTGRES_USER" \
@@ -53,37 +61,50 @@ docker run -d --rm \
 
 # 3. 等待 DB 就緒
 echo "Waiting for DB..."
-until docker exec "$AIRFLOW_DB_CONTAINER" pg_isready -U "$POSTGRES_USER"; do
+until $DOCKER_CMD exec "$AIRFLOW_DB_CONTAINER" pg_isready -U "$POSTGRES_USER"; do
   sleep 2
 done
 
 # 3b. CeleryExecutor 時啟動 Redis 並等待就緒
 if [[ "$EXECUTOR" == "CeleryExecutor" ]]; then
-  docker run -d --rm \
+  $DOCKER_CMD run -d --rm \
     --name "$AIRFLOW_REDIS_CONTAINER" \
     --network "$AIRFLOW_NETWORK" \
     -p 6379:6379 \
     redis:7-alpine
   echo "Waiting for Redis..."
-  until docker exec "$AIRFLOW_REDIS_CONTAINER" redis-cli ping 2>/dev/null | grep -q PONG; do
+  until $DOCKER_CMD exec "$AIRFLOW_REDIS_CONTAINER" redis-cli ping 2>/dev/null | grep -q PONG; do
     sleep 1
   done
 fi
 
-# 4. 初始化 DB（僅需跑一次；已有 DB 時可改為 airflow db migrate）
-docker run --rm \
-  --network "$AIRFLOW_NETWORK" \
-  -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="$SQL_ALCHEMY_CONN" \
-  -e AIRFLOW__CORE__EXECUTOR="$EXECUTOR" \
-  "${CELERY_ENV_ARGS[@]}" \
-  "$AIRFLOW_IMAGE" \
-  airflow db init
+# 4. 初始化或遷移 DB：若 DB 已有 Airflow 表則 migrate，否則 init
+DB_HAS_AIRFLOW_TABLES=$($DOCKER_CMD exec "$AIRFLOW_DB_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='ab_user' LIMIT 1" 2>/dev/null || true)
+if [[ "$DB_HAS_AIRFLOW_TABLES" == "1" ]]; then
+  echo "DB already has Airflow tables, running db migrate..."
+  $DOCKER_CMD run --rm \
+    --network "$AIRFLOW_NETWORK" \
+    -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="$SQL_ALCHEMY_CONN" \
+    -e AIRFLOW__CORE__EXECUTOR="$EXECUTOR" \
+    "${CELERY_ENV_ARGS[@]}" \
+    "$AIRFLOW_IMAGE" \
+    airflow db migrate
+else
+  echo "Initializing DB..."
+  $DOCKER_CMD run --rm \
+    --network "$AIRFLOW_NETWORK" \
+    -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="$SQL_ALCHEMY_CONN" \
+    -e AIRFLOW__CORE__EXECUTOR="$EXECUTOR" \
+    "${CELERY_ENV_ARGS[@]}" \
+    "$AIRFLOW_IMAGE" \
+    airflow db init
+fi
 
 # 5. 建立 admin 使用者（可選，首次可手動或略過）
 # docker run --rm --network ... -e ... "$AIRFLOW_IMAGE" airflow users create ...
 
 # 6. 啟動 scheduler
-docker run -d --rm \
+$DOCKER_CMD run -d --rm \
   --name "$AIRFLOW_SCHEDULER_CONTAINER" \
   --network "$AIRFLOW_NETWORK" \
   -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="$SQL_ALCHEMY_CONN" \
@@ -94,7 +115,7 @@ docker run -d --rm \
   airflow scheduler
 
 # 7. 啟動 webserver
-docker run -d --rm \
+$DOCKER_CMD run -d --rm \
   --name "$AIRFLOW_WEBSERVER_CONTAINER" \
   --network "$AIRFLOW_NETWORK" \
   -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="$SQL_ALCHEMY_CONN" \
@@ -107,7 +128,7 @@ docker run -d --rm \
 
 # 8. CeleryExecutor 時啟動 worker 與 flower
 if [[ "$EXECUTOR" == "CeleryExecutor" ]]; then
-  docker run -d --rm \
+  $DOCKER_CMD run -d --rm \
     --name "$AIRFLOW_WORKER_CONTAINER" \
     --network "$AIRFLOW_NETWORK" \
     -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="$SQL_ALCHEMY_CONN" \
@@ -117,7 +138,7 @@ if [[ "$EXECUTOR" == "CeleryExecutor" ]]; then
     "$AIRFLOW_IMAGE" \
     airflow celery worker
 
-  docker run -d --rm \
+  $DOCKER_CMD run -d --rm \
     --name "$AIRFLOW_FLOWER_CONTAINER" \
     --network "$AIRFLOW_NETWORK" \
     -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="$SQL_ALCHEMY_CONN" \

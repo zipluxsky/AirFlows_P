@@ -14,43 +14,47 @@ fail() { echo "  FAIL $*"; ((FAIL++)) || true; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# 若在 docker 群組則不用 sudo，否則用 sudo 執行 docker（與 build/start/stop 腳本一致）
+if groups | grep -qw docker; then DOCKER_CMD="docker"; else DOCKER_CMD="sudo docker"; fi
+
 echo "=============================================="
 echo "  Server Permission / User Right Test"
 echo "  Project root: $PROJECT_ROOT"
+echo "  Docker command: $DOCKER_CMD"
 echo "=============================================="
 
 echo ""
 echo "=== 1. User & groups ==="
 whoami
 id
-if groups | grep -q docker; then
-  pass "User is in group 'docker'"
+if groups | grep -qw docker; then
+  pass "User is in group 'docker' (will use docker without sudo)"
 else
-  fail "User not in group 'docker' (Docker may require it)"
+  pass "User not in docker group (will use sudo docker)"
 fi
 
 echo ""
 echo "=== 2. Docker ==="
-if docker --version; then
-  pass "docker --version"
+if $DOCKER_CMD --version; then
+  pass "$DOCKER_CMD --version"
 else
-  fail "docker --version"
+  fail "$DOCKER_CMD --version"
 fi
-if docker info &>/dev/null; then
-  pass "docker info"
+if $DOCKER_CMD info &>/dev/null; then
+  pass "$DOCKER_CMD info"
 else
-  fail "docker info (permission or daemon)"
+  fail "$DOCKER_CMD info (permission or daemon)"
 fi
-if docker run --rm hello-world &>/dev/null; then
-  pass "docker run --rm hello-world"
+if $DOCKER_CMD run --rm hello-world &>/dev/null; then
+  pass "$DOCKER_CMD run --rm hello-world"
 else
-  fail "docker run (pull/run permission)"
+  fail "$DOCKER_CMD run (pull/run permission)"
 fi
 NET_NAME="test-net-$$"
-if docker network create "$NET_NAME" &>/dev/null && docker network rm "$NET_NAME" &>/dev/null; then
-  pass "docker network create/rm"
+if $DOCKER_CMD network create "$NET_NAME" &>/dev/null && $DOCKER_CMD network rm "$NET_NAME" &>/dev/null; then
+  pass "$DOCKER_CMD network create/rm"
 else
-  fail "docker network create/rm"
+  fail "$DOCKER_CMD network create/rm"
 fi
 
 echo ""
@@ -76,7 +80,7 @@ fi
 
 echo ""
 echo "=== 4. Volume mount (dags) ==="
-if docker run --rm -v "$(pwd)/dags:/opt/airflow/dags:ro" alpine ls /opt/airflow/dags &>/dev/null; then
+if $DOCKER_CMD run --rm -v "$(pwd)/dags:/opt/airflow/dags:ro" alpine ls /opt/airflow/dags &>/dev/null; then
   pass "Volume mount dags (read-only)"
 else
   fail "Volume mount dags"
@@ -84,27 +88,41 @@ fi
 
 echo ""
 echo "=== 5. Network & ports (quick check) ==="
-if docker network create airflow-net &>/dev/null 2>&1; then
-  pass "docker network create airflow-net"
-  if docker run -d --rm --name airflow-db-test -e POSTGRES_PASSWORD=p -e POSTGRES_USER=u -e POSTGRES_DB=d --network airflow-net -p 5432:5432 postgres:15-alpine &>/dev/null; then
+NET_CREATED=false
+if $DOCKER_CMD network create airflow-net &>/dev/null 2>&1; then
+  pass "$DOCKER_CMD network create airflow-net"
+  NET_CREATED=true
+else
+  # network already exists: try to stop leftover test containers, remove network, recreate
+  if $DOCKER_CMD network inspect airflow-net &>/dev/null; then
+    $DOCKER_CMD stop airflow-db-test airflow-db-test-$$ 2>/dev/null || true
+    if $DOCKER_CMD network rm airflow-net &>/dev/null && $DOCKER_CMD network create airflow-net &>/dev/null 2>&1; then
+      pass "airflow-net recreated (was existing)"
+      NET_CREATED=true
+    else
+      # network in use (e.g. Airflow running): run Postgres check on existing network without removing it
+      pass "airflow-net exists (inspect OK)"
+      NET_CREATED=true
+    fi
+  else
+    fail "$DOCKER_CMD network create airflow-net"
+  fi
+fi
+if [[ "$NET_CREATED" == true ]]; then
+  DB_TEST_NAME="airflow-db-test-$$"
+  # Do not bind host port 5432 so this works when airflow-net already has containers (e.g. Airflow running)
+  if $DOCKER_CMD run -d --rm --name "$DB_TEST_NAME" -e POSTGRES_PASSWORD=p -e POSTGRES_USER=u -e POSTGRES_DB=d --network airflow-net postgres:15-alpine &>/dev/null; then
     sleep 2
-    if docker exec airflow-db-test pg_isready -U u &>/dev/null; then
+    if $DOCKER_CMD exec "$DB_TEST_NAME" pg_isready -U u &>/dev/null; then
       pass "PostgreSQL container run & pg_isready"
     else
       fail "pg_isready"
     fi
-    docker stop airflow-db-test &>/dev/null || true
+    $DOCKER_CMD stop "$DB_TEST_NAME" &>/dev/null || true
   else
     fail "PostgreSQL container run (pull/port?)"
   fi
-  docker network rm airflow-net &>/dev/null || true
-else
-  # network may already exist from previous run
-  if docker network inspect airflow-net &>/dev/null; then
-    pass "airflow-net exists (inspect OK)"
-  else
-    fail "docker network create airflow-net"
-  fi
+  $DOCKER_CMD network rm airflow-net &>/dev/null || true
 fi
 if command -v curl &>/dev/null; then
   pass "curl available"

@@ -82,7 +82,7 @@ flowchart LR
 
 ```bash
 export DOCKER_BUILDKIT=1
-docker build -f docker/Dockerfile.airflow --build-arg AIRFLOW_VERSION=3.2.0 -t airflow:3.2.0-custom .
+sudo docker build -f docker/Dockerfile.airflow --build-arg AIRFLOW_VERSION=3.2.0 -t airflow:3.2.0-custom .
 ```
 
 若在 **Apple Silicon Mac** 上建置且映像要在 **Rocky Linux** 使用，請加 `--platform linux/amd64`。詳見下方 2.2／2.3。
@@ -91,7 +91,7 @@ docker build -f docker/Dockerfile.airflow --build-arg AIRFLOW_VERSION=3.2.0 -t a
 
 | 項目       | 要求                                                         | 檢查方式                                       |
 | -------- | ---------------------------------------------------------- | ------------------------------------------ |
-| Docker   | 23.0.0+                                                    | `docker --version`                         |
+| Docker   | 23.0.0+                                                    | `sudo docker --version`（本專案以 sudo 執行） |
 | BuildKit | 啟用                                                         | `export DOCKER_BUILDKIT=1`                 |
 | 工作目錄     | 專案根目錄 AirFlow/                                             | `pwd` 應為含 `docker/`、`scripts/` 的目錄         |
 | **目標平台** | 若映像要在 Rocky Linux 跑，建置應在 Rocky 或加 `--platform linux/amd64` | 本機：`docker buildx ls`；CI 建議在 Rocky 上 build |
@@ -108,14 +108,14 @@ docker build -f docker/Dockerfile.airflow --build-arg AIRFLOW_VERSION=3.2.0 -t a
 2. **一鍵建置指令（本機試建）**
    - 在專案根目錄執行（請先 `export DOCKER_BUILDKIT=1`）：
      ```bash
-     docker build -f docker/Dockerfile.airflow \
+     sudo docker build -f docker/Dockerfile.airflow \
        --build-arg AIRFLOW_VERSION=3.2.0 \
        --build-arg AIRFLOW_PYTHON_VERSION=3.12.12 \
        -t airflow:3.2.0-custom \
        .
      ```
    - 本機（Mac Intel 或僅在 Mac 跑）：維持上列指令即可。**Mac 建給 Rocky 用**：在 `docker build` 中加上 `--platform linux/amd64`（若開發機為 Apple Silicon 且需產出給 Rocky 的映像，務必加上）。
-   - 建置完成後驗證：`docker run --rm airflow:3.2.0-custom airflow version`。
+   - 建置完成後驗證：`sudo docker run --rm airflow:3.2.0-custom airflow version`。
 3. **可選：自訂依賴**
    - 在 `docker/context/requirements.txt` 加入額外套件，建置時加上：
      `--build-arg DOCKER_CONTEXT_FILES=docker/context`
@@ -146,7 +146,7 @@ flowchart LR
 3. **啟用 BuildKit 並以 repo 內 Dockerfile 從 source 建置**
    ```bash
    export DOCKER_BUILDKIT=1
-   docker build -f Dockerfile \
+   sudo docker build -f Dockerfile \
      --build-arg AIRFLOW_INSTALLATION_METHOD=. \
      --build-arg AIRFLOW_SOURCES_FROM=. \
      --build-arg AIRFLOW_SOURCES_TO=/opt/airflow \
@@ -154,7 +154,7 @@ flowchart LR
      -t airflow:3.2.0-from-source \
      .
    ```
-4. **驗證**：`docker run --rm airflow:3.2.0-from-source airflow version`。
+4. **驗證**：`sudo docker run --rm airflow:3.2.0-from-source airflow version`。
 5. **可選：移除下載之源碼**：建置完成且驗證通過後，可刪除 clone 目錄以釋放空間，例如回到上層目錄執行 `rm -rf airflow-src`。CI 中建議於 `after_script` 或 job 結束前清理。
 
 ### 2.4 移除無用檔案（縮小 build context、保持專案簡潔）
@@ -219,17 +219,17 @@ AirFlow/
 
 ## 四、Shell 腳本取代 docker-compose 的設計要點
 
-- **網路**：建立專用 bridge，例如 `docker network create airflow-net`，所有服務用 `--network airflow-net`。
+- **網路**：建立專用 bridge，例如 `sudo docker network create airflow-net`，所有服務用 `--network airflow-net`。
 - **啟動順序**：  
   1. 建立 network。  
   2. 啟動 **airflow-metadata-db**（PostgreSQL），暴露埠（如 5432）。  
-  3. 等待 DB 就緒（例如 `until docker exec airflow-db pg_isready -U postgres; do sleep 2; done`）。  
+  3. 等待 DB 就緒（例如 `until sudo docker exec airflow-db pg_isready -U postgres; do sleep 2; done`）。  
   4. 依序或並行啟動 **scheduler**、**webserver**；若為 Celery，再啟動 **worker**、**flower**。  
 - **共用設定**：  
   - 所有 Airflow 容器使用相同 `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN`（指向 metadata-db 容器名與埠）。  
   - `AIRFLOW__CORE__EXECUTOR`、`AIRFLOW__CELERY__*` 等由環境變數或 `config/env.example` 提供。  
 - **DAG 掛載**：每個 Airflow 容器加上 `-v $(pwd)/dags:/opt/airflow/dags`（或 CI 中 `$CI_PROJECT_DIR/dags`）。  
-- **清理**：`stop-airflow.sh` 中對上述容器做 `docker stop` / `docker rm`，最後 `docker network rm airflow-net`。
+- **清理**：`stop-airflow.sh` 中對上述容器做 `docker stop` / `docker rm`（或 sudo docker），最後 `docker network rm airflow-net`。腳本會依是否在 **docker 群組**自動使用 `docker` 或 **sudo docker**。
 
 這樣即可在不使用 docker-compose 的前提下，對應圖中除「airflow-executor」「airflow-readme」外的所有元件。
 
@@ -237,8 +237,8 @@ AirFlow/
 
 ## 五、GitLab CI 設計（shell executor、無 Registry）
 
-- **Runner**：僅使用 **shell executor**，且該 Runner 主機需已安裝 Docker，執行 Runner 的使用者具備 `docker` 權限（例如在 `docker` group）。**Runner 建議**：Runner 主機建議為 **Rocky Linux**（或同為 linux/amd64），在此執行 `scripts/build.sh` 產出的映像即為 amd64，與部署環境一致，無需指定 `--platform`。
-- **不推送到 Registry**：CI 中僅 `docker build` 與 `docker run`，不執行 `docker push`。
+- **Runner**：僅使用 **shell executor**，且該 Runner 主機需已安裝 Docker。腳本會**先檢查是否在 docker 群組**：**若在則直接執行 `docker`**，**若不在則以 `sudo docker` 執行**；故 Runner 使用者須在 docker 群組，或具備**無密碼 `sudo docker`** 權限。**Runner 建議**：Runner 主機建議為 **Rocky Linux**（或同為 linux/amd64），在此執行 `scripts/build.sh` 產出的映像即為 amd64，與部署環境一致，無需指定 `--platform`。
+- **不推送到 Registry**：CI 中僅 build 與 run（依上列邏輯使用 docker 或 sudo docker），不執行 `docker push`。
 - **單一 Runner 一致性**：為避免 image 只存在某台機器，CI 的 build 與 run 應在同一台 shell runner 上執行（透過 `tags` 指定同一組 tag）。
 
 建議的 `.gitlab-ci.yml` 結構（概念）：
@@ -269,14 +269,29 @@ AirFlow/
 5. **執行用**：建立 `scripts/stop-airflow.sh`（停止並刪除容器與 network）。
 6. **CI 用**：撰寫 `.gitlab-ci.yml`（build → start → 健康檢查 → stop），限定 shell runner，不 push Registry。
 7. **可選**：準備 `dags/.gitkeep`、`config/env.example`（含 executor 設定）。
-8. **Runner 主機**：建議使用 **Rocky Linux**（或 linux/amd64）；Docker 23.0+、BuildKit 可用、同一組 shell runner 負責 build 與 run。若 Runner 為 Mac（如僅本機測試），且需產出給 Rocky 的映像，則在 `scripts/build.sh` 內為 `docker build` 加上 `--platform linux/amd64`。
+8. **Runner 主機**：建議使用 **Rocky Linux**（或 linux/amd64）；Docker 23.0+、BuildKit 可用、同一組 shell runner 負責 build 與 run；Runner 須在 docker 群組或具備**無密碼 sudo docker**。若 Runner 為 Mac（如僅本機測試），且需產出給 Rocky 的映像，則在 `scripts/build.sh` 內為 docker build 加上 `--platform linux/amd64`。
+
+---
+
+### 升級 Airflow 版本
+
+若 metadata DB **已存在**且要**升級 Airflow 版本**，首次以新映像啟動前應執行一次 schema 遷移：
+
+- **手動做法**：在與 DB 連線相同的環境執行一次 `airflow db migrate`，例如：
+  ```bash
+  docker run --rm --network airflow-net \
+    -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow" \
+    airflow:<新版本>-custom airflow db migrate
+  ```
+  之後再照常執行 `./scripts/start-airflow.sh`。
+- **腳本行為**：`start-airflow.sh` 會偵測 DB 是否已有 Airflow 表（如 `ab_user`）；若已存在則執行 `airflow db migrate`，否則執行 `airflow db init`。因此升級後直接執行 `start-airflow.sh` 即可，無須手動先跑 migrate（除非希望先單獨驗證遷移）。
 
 ---
 
 ## 七、風險與注意事項
 
 - **Mac 與 Rocky 架構**：在 Apple Silicon Mac 上建出的映像預設為 arm64，無法在 Rocky (x86_64) 直接執行；正式建置建議在 Rocky 上執行，或在 Mac 建置時使用 `--platform linux/amd64`。
-- **Shell executor 與 Docker**：job 直接跑在 Runner 主機上，建出的 image 僅存在該主機；若有多台 shell runner，需保證「建置與執行」在同一台，或接受每台各自 build。
+- **Shell executor 與 Docker**：job 直接跑在 Runner 主機上，建出的 image 僅存在該主機；腳本依是否在 **docker 群組**使用 `docker` 或 **sudo docker**，若不在群組則 Runner 需設定無密碼 sudo docker。若有多台 shell runner，需保證「建置與執行」在同一台，或接受每台各自 build。
 - **從源碼建置時間**：方案 A 首次建置較久（A2 更久），可善用 `docker build` 快取與 BuildKit；可選 `DEPENDENCY_CACHE_EPOCH` 控制依賴快取。
 - **Executor 選擇**：LocalExecutor 不需 Redis/Celery，腳本較簡單；CeleryExecutor 需在 `start-airflow.sh` 中多起 Redis 與 worker/flower，並設定 `AIRFLOW__CELERY__BROKER_URL` 等。
 - **機密**：DB 密碼、broker URL 等一律透過 GitLab CI variables 傳入，勿寫入程式庫。
