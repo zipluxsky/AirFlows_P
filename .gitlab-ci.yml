@@ -46,7 +46,7 @@ permission_test:
 deploy:
   extends: .deploy_base
   script:
-    - cd "${DEPLOY_PATH}" && export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" && sudo -E docker compose pull && sudo -E docker compose up -d
+    - cd "${DEPLOY_PATH}" && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" pull && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" up -d
   only:
     - master
 
