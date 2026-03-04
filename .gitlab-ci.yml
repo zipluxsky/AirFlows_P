@@ -1,35 +1,37 @@
 # GitLab CI/CD: deploy Airflow using official Docker image (no SSH).
-# 僅限 Shell executor：job 在 Runner 主機的 shell 直接執行，不使用 Docker executor / dind。
-# 使用 Docker 命名 volume 存放 dags/logs/config/plugins，不需在 host 上 mkdir。
-# Runner 主機需已安裝 Docker 且可執行 docker compose（sudo docker / docker compose）。
+# Shell executor only: jobs run directly in the Runner host's shell; Docker executor / dind is not used.
+# Uses Docker named volumes for dags/logs/config/plugins; no need to mkdir on the host.
+# Runner host must have Docker installed and be able to run docker compose (sudo docker / docker compose).
 
 default:
   tags:
     - Docker-FIX
-  # Shell executor：不指定 image，在 runner 本機執行
+  # Shell executor: no image specified; runs on the runner host
 
 stages:
   - permission_test
   - deploy
 
 variables:
-  # 從 repo 目錄執行 deploy，docker-compose 使用 named volumes，無需 host 目錄權限
+  # Deploy runs from repo directory; docker-compose uses named volumes, no host directory permissions needed
   DEPLOY_PATH: "${CI_PROJECT_DIR}"
+  # Fixed project name so the dags volume is predictable for deploy_dags (volume name: airflow_airflow-dags)
+  COMPOSE_PROJECT_NAME: "airflow"
 
 permission_test:
   stage: permission_test
   script:
-    # 基本 Docker 與 Compose 可用性
+    # Basic Docker and Compose availability
     - sudo docker ps
     - sudo docker compose version
-    # Volume 權限：建立、掛載、寫入、刪除
+    # Volume permissions: create, mount, write, delete
     - |
       VOL_NAME="ci_perm_test_$$"
       sudo docker volume create "$VOL_NAME"
       sudo docker run --rm -v "${VOL_NAME}:/data" alpine touch /data/ok
       sudo docker run --rm -v "${VOL_NAME}:/data" alpine test -f /data/ok
       sudo docker volume rm "$VOL_NAME"
-    # 確認可從當前目錄執行 compose（不需 mkdir）
+    # Verify compose can run from current directory (no mkdir needed)
     - cd "${CI_PROJECT_DIR}" && test -f docker-compose.yml && sudo docker compose config --quiet
   only:
     - master
@@ -43,6 +45,25 @@ permission_test:
 deploy:
   extends: .deploy_base
   script:
-    - cd "${DEPLOY_PATH}" && sudo docker compose pull && sudo docker compose up -d
+    - cd "${DEPLOY_PATH}" && sudo env COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" docker compose pull && sudo env COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" docker compose up -d
   only:
     - master
+
+# Sync DAGs from repo dags/ into the Airflow dags volume only; does not restart any containers.
+# Runs only when dags/ has changes (on master); can also be triggered manually from the pipeline.
+deploy_dags:
+  stage: deploy
+  script:
+    - test -d "${CI_PROJECT_DIR}/dags"
+    - sudo docker volume create "${COMPOSE_PROJECT_NAME}_airflow-dags" 2>/dev/null || true
+    - |
+      sudo docker run --rm \
+        -v "${COMPOSE_PROJECT_NAME}_airflow-dags:/opt/airflow/dags" \
+        -v "${CI_PROJECT_DIR}/dags:/source:ro" \
+        alpine sh -c "find /opt/airflow/dags -mindepth 1 -delete && cp -r /source/. /opt/airflow/dags/"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+      changes:
+        - dags/**/*
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: manual

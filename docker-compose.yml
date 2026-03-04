@@ -1,5 +1,5 @@
-# Airflow 使用 Docker 命名 volume，不需在 host 上 mkdir。
-# dags / logs / config / plugins 各自在獨立 volume 中。
+# Airflow uses Docker named volumes; no need to mkdir on the host.
+# dags / logs / config / plugins each live in their own volume.
 
 services:
   airflow-webserver:

@@ -1,4 +1,4 @@
-# 排除無用檔案，縮小 build context（見 docs/IMPLEMENTATION_PLAN.md 2.4）
+# Exclude unused files to reduce build context (see docs/IMPLEMENTATION_PLAN.md 2.4)
 .git/
 .cursor/
 *.md

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Example DAG definitions. Copy this file or add new .xml files here.
+  Each <dag> creates one Airflow DAG that triggers an HTTP request on schedule.
+-->
+<dags>
+  <!-- Daily GET at 08:00 UTC -->
+  <dag id="example_daily_get" schedule="0 8 * * *" description="Daily GET example">
+    <trigger url="https://httpbin.org/get" method="get">
+      <params>
+        <param name="foo">bar</param>
+        <param name="source">airflow</param>
+      </params>
+    </trigger>
+  </dag>
+
+  <!-- POST with JSON body, runs every hour -->
+  <dag id="example_hourly_post" schedule="0 * * * *" description="Hourly POST with JSON body">
+    <trigger url="https://httpbin.org/post" method="post">
+      <headers>
+        <header name="Content-Type">application/json</header>
+      </headers>
+      <body type="json">
+        {"schedule": "hourly", "trigger": "airflow"}
+      </body>
+    </trigger>
+  </dag>
+
+  <!-- PUT with optional query params -->
+  <dag id="example_put_trigger" schedule="0 12 * * 1-5" description="Weekday noon PUT">
+    <trigger url="https://httpbin.org/put" method="put">
+      <query_params>
+        <param name="id">sync-1</param>
+      </query_params>
+      <body type="json">
+        {"action": "sync"}
+      </body>
+    </trigger>
+  </dag>
+</dags>
