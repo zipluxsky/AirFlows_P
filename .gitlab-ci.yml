@@ -43,28 +43,42 @@ permission_test:
     - cd "${DEPLOY_PATH}"
     - test -f docker-compose.yml
 
+# Auto-detect: if only dags/ changed → sync DAGs only; otherwise → full deploy (and sync DAGs if they changed too).
 deploy:
   extends: .deploy_base
   script:
-    - cd "${DEPLOY_PATH}" && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" pull && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" up -d
+    - |
+      # Detect changed files (push: before vs current; fallback to full deploy if no valid diff)
+      PREV="${CI_COMMIT_BEFORE_SHA:-0000000000000000000000000000000000000000}"
+      if [ "$PREV" = "0000000000000000000000000000000000000000" ] || ! git rev-parse -q --verify "$PREV" >/dev/null 2>&1; then
+        CHANGED_FILES=""
+      else
+        CHANGED_FILES=$(git diff --name-only "$PREV" "$CI_COMMIT_SHA" 2>/dev/null || true)
+      fi
+      DAGS_ONLY=1
+      HAS_DAGS_CHANGE=0
+      for f in $CHANGED_FILES; do
+        case "$f" in dags/*) HAS_DAGS_CHANGE=1 ;; *) DAGS_ONLY=0 ;; esac
+      done
+      [ -z "$CHANGED_FILES" ] && DAGS_ONLY=0
+      if [ "$DAGS_ONLY" = 1 ] && [ "$HAS_DAGS_CHANGE" = 1 ]; then
+        echo "Only dags/ changed → syncing DAGs only (no restart)."
+        sudo docker volume create "${COMPOSE_PROJECT_NAME}_airflow-dags" 2>/dev/null || true
+        sudo docker run --rm \
+          -v "${COMPOSE_PROJECT_NAME}_airflow-dags:/opt/airflow/dags" \
+          -v "${CI_PROJECT_DIR}/dags:/source:ro" \
+          alpine sh -c "find /opt/airflow/dags -mindepth 1 -delete && cp -r /source/. /opt/airflow/dags/"
+      else
+        echo "Full deploy (compose pull + up -d)."
+        cd "${DEPLOY_PATH}" && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" pull && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" up -d
+        if [ "$HAS_DAGS_CHANGE" = 1 ]; then
+          echo "DAGs also changed → syncing DAGs into volume."
+          sudo docker volume create "${COMPOSE_PROJECT_NAME}_airflow-dags" 2>/dev/null || true
+          sudo docker run --rm \
+            -v "${COMPOSE_PROJECT_NAME}_airflow-dags:/opt/airflow/dags" \
+            -v "${CI_PROJECT_DIR}/dags:/source:ro" \
+            alpine sh -c "find /opt/airflow/dags -mindepth 1 -delete && cp -r /source/. /opt/airflow/dags/"
+        fi
+      fi
   only:
     - master
-
-# Sync DAGs from repo dags/ into the Airflow dags volume only; does not restart any containers.
-# Runs only when dags/ has changes (on master); can also be triggered manually from the pipeline.
-deploy_dags:
-  stage: deploy
-  script:
-    - test -d "${CI_PROJECT_DIR}/dags"
-    - sudo docker volume create "${COMPOSE_PROJECT_NAME}_airflow-dags" 2>/dev/null || true
-    - |
-      sudo docker run --rm \
-        -v "${COMPOSE_PROJECT_NAME}_airflow-dags:/opt/airflow/dags" \
-        -v "${CI_PROJECT_DIR}/dags:/source:ro" \
-        alpine sh -c "find /opt/airflow/dags -mindepth 1 -delete && cp -r /source/. /opt/airflow/dags/"
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-      changes:
-        - dags/**/*
-    - if: $CI_COMMIT_BRANCH == "master"
-      when: manual
