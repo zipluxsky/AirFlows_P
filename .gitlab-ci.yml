@@ -2,6 +2,7 @@
 # Shell executor only: jobs run directly in the Runner host's shell; Docker executor / dind is not used.
 # Uses Docker named volumes for dags/logs/config/plugins; no need to mkdir on the host.
 # Runner host must have Docker installed and be able to run docker compose (sudo docker / docker compose).
+# Policy: use sudo for all docker/compose commands; do not use sudo for other commands (cd, test, etc.).
 
 default:
   tags:
@@ -45,7 +46,7 @@ permission_test:
 deploy:
   extends: .deploy_base
   script:
-    - cd "${DEPLOY_PATH}" && sudo env COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" docker compose pull && sudo env COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" docker compose up -d
+    - cd "${DEPLOY_PATH}" && export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}" && sudo -E docker compose pull && sudo -E docker compose up -d
   only:
     - master
 
