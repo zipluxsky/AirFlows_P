@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Example: DAGs that call Vascular Celery tasks by router function names (Option B).
+  Task names match project/app/api/routers: trigger_processing, upload_document.
+  Requires VASCULAR_CELERY_BROKER_URL (or shared Redis) and Vascular workers on the same broker.
+-->
+<dags>
+  <!-- Router name: communicators.trigger_processing -> runs process_communicator_files -->
+  <dag id="vascular_trigger_processing" schedule="0 8 * * *" description="Vascular communicator processing (router: trigger_processing)">
+    <trigger type="celery" task="trigger_processing"/>
+  </dag>
+
+  <!-- Router name: front_office.upload_document -> logs document_upload event -->
+  <dag id="vascular_upload_document" schedule="0 9 * * *" description="Vascular upload_document task (router: upload_document)">
+    <trigger type="celery" task="upload_document">
+      <kwargs>
+        <param name="document_type">general</param>
+      </kwargs>
+    </trigger>
+  </dag>
+</dags>

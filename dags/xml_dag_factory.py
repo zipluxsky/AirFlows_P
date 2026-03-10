@@ -1,9 +1,10 @@
 """
 XML-driven DAG factory: create Airflow DAGs from XML files without writing Python.
-Edit XML in dags/dag_definitions/ to add new DAGs (schedule, trigger URL, method, parameters).
+Edit XML in dags/dag_definitions/ to add new DAGs (schedule, trigger URL or Celery task).
 """
 from __future__ import annotations
 
+import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,24 @@ def _http_trigger(
         raise RuntimeError(f"HTTP {code} for {method} {url}")
 
 
+def _get_vascular_celery_app():
+    """Lazy Celery app for sending tasks to Vascular (same broker, no tasks registered)."""
+    from celery import Celery
+    broker = os.getenv("VASCULAR_CELERY_BROKER_URL") or os.getenv("AIRFLOW__CELERY__BROKER_URL") or "redis://localhost:6379/0"
+    return Celery(broker=broker, backend=broker, include=[])
+
+
+def _celery_trigger(
+    task_name: str,
+    args: list[Any] | None = None,
+    kwargs: dict[str, Any] | None = None,
+    **_: Any,
+) -> None:
+    """Send a task to Vascular Celery workers. Used as PythonOperator callable."""
+    app = _get_vascular_celery_app()
+    app.send_task(task_name, args=args or [], kwargs=kwargs or {})
+
+
 def _parse_params(parent: ET.Element | None, tag: str, key_attr: str = "name") -> dict[str, str]:
     if parent is None:
         return {}
@@ -83,8 +102,29 @@ def _parse_params(parent: ET.Element | None, tag: str, key_attr: str = "name") -
 
 def _parse_trigger(trigger: ET.Element) -> dict[str, Any]:
     url = (trigger.get("url") or "").strip()
+    trigger_type_attr = (trigger.get("type") or "").strip().lower()
+    task_attr = (trigger.get("task") or "").strip()
+
+    is_celery = trigger_type_attr == "celery" or (task_attr and not url)
+    if is_celery:
+        if not task_attr:
+            raise ValueError("trigger type='celery' must have task=...")
+        args_el = trigger.find("args")
+        args = []
+        if args_el is not None:
+            for arg in args_el.findall("arg"):
+                args.append((arg.text or "").strip())
+        kwargs_el = trigger.find("kwargs")
+        kwargs = _parse_params(kwargs_el, "param", "name") if kwargs_el is not None else {}
+        return {
+            "trigger_type": "celery",
+            "task": task_attr,
+            "args": args,
+            "kwargs": kwargs,
+        }
+
     if not url:
-        raise ValueError("trigger must have url")
+        raise ValueError("trigger must have url or type='celery' with task")
     method = (trigger.get("method") or "get").strip().lower()
     if method not in ALLOWED_METHODS:
         raise ValueError(f"method must be one of {sorted(ALLOWED_METHODS)}, got {method!r}")
@@ -106,6 +146,7 @@ def _parse_trigger(trigger: ET.Element) -> dict[str, Any]:
         body_type = (body_el.get("type") or "json").strip().lower()
 
     return {
+        "trigger_type": "http",
         "url": url,
         "method": method,
         "query_params": query_params,
@@ -144,20 +185,33 @@ def create_dag_from_xml_element(dag_el: ET.Element, source_file: str) -> DAG | N
         doc_md=description,
     )
 
-    task_id = "http_trigger"
-    PythonOperator(
-        task_id=task_id,
-        python_callable=_http_trigger,
-        op_kwargs={
-            "url": trigger["url"],
-            "method": trigger["method"],
-            "query_params": trigger["query_params"] or None,
-            "headers": trigger["headers"] or None,
-            "body": trigger["body"],
-            "body_type": trigger["body_type"],
-        },
-        dag=dag,
-    )
+    if trigger.get("trigger_type") == "celery":
+        task_id = "celery_trigger"
+        PythonOperator(
+            task_id=task_id,
+            python_callable=_celery_trigger,
+            op_kwargs={
+                "task_name": trigger["task"],
+                "args": trigger.get("args") or [],
+                "kwargs": trigger.get("kwargs") or {},
+            },
+            dag=dag,
+        )
+    else:
+        task_id = "http_trigger"
+        PythonOperator(
+            task_id=task_id,
+            python_callable=_http_trigger,
+            op_kwargs={
+                "url": trigger["url"],
+                "method": trigger["method"],
+                "query_params": trigger["query_params"] or None,
+                "headers": trigger["headers"] or None,
+                "body": trigger["body"],
+                "body_type": trigger["body_type"],
+            },
+            dag=dag,
+        )
     return dag
 
 

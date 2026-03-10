@@ -11,7 +11,7 @@ services:
       - airflow-config:/opt/airflow/config
       - airflow-plugins:/opt/airflow/plugins
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
@@ -19,11 +19,14 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-celery redis sqlalchemy
     depends_on:
       - postgres
       - redis
     ports:
       - "8080:8080"
+    networks:
+      - airflow_shared_net
     restart: unless-stopped
 
   airflow-scheduler:
@@ -35,15 +38,45 @@ services:
       - airflow-config:/opt/airflow/config
       - airflow-plugins:/opt/airflow/plugins
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      # For XML DAGs that trigger Vascular Celery tasks (same Redis or Vascular broker)
+      - VASCULAR_CELERY_BROKER_URL=redis://redis:6379/0
       - AIRFLOW__CORE__FERNET_KEY=
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-celery redis sqlalchemy
     depends_on:
       - airflow-init
+    networks:
+      - airflow_shared_net
+    restart: unless-stopped
+
+  airflow-worker:
+    image: apache/airflow:2.8.0
+    command: celery worker
+    volumes:
+      - airflow-dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+      - airflow-config:/opt/airflow/config
+      - airflow-plugins:/opt/airflow/plugins
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      # For XML DAGs that trigger Vascular Celery tasks (same Redis or Vascular broker)
+      - VASCULAR_CELERY_BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__FERNET_KEY=
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-celery redis sqlalchemy
+    depends_on:
+      - airflow-init
+    networks:
+      - airflow_shared_net
     restart: unless-stopped
 
   airflow-init:
@@ -59,12 +92,15 @@ services:
       - airflow-config:/opt/airflow/config
       - airflow-plugins:/opt/airflow/plugins
     environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CORE__FERNET_KEY=
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-celery redis sqlalchemy
     depends_on:
       - postgres
+    networks:
+      - airflow_shared_net
 
   postgres:
     image: postgres:15
@@ -78,10 +114,14 @@ services:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 5s
       retries: 5
+    networks:
+      - airflow_shared_net
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    networks:
+      - airflow_shared_net
     restart: unless-stopped
 
 volumes:
@@ -90,3 +130,8 @@ volumes:
   airflow-config:
   airflow-plugins:
   postgres-db:
+
+networks:
+  airflow_shared_net:
+    name: airflow_shared_net
+    driver: bridge
