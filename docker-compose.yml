@@ -42,8 +42,8 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
-      # For XML DAGs that trigger Vascular Celery tasks (same Redis or Vascular broker)
-      - VASCULAR_CELERY_BROKER_URL=redis://redis:6379/0
+      # Points to Vascular's Redis so Airflow can dispatch tasks to Vascular workers
+      - VASCULAR_CELERY_BROKER_URL=redis://vascular-redis:6379/0
       - AIRFLOW__CORE__FERNET_KEY=
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
@@ -67,8 +67,8 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
-      # For XML DAGs that trigger Vascular Celery tasks (same Redis or Vascular broker)
-      - VASCULAR_CELERY_BROKER_URL=redis://redis:6379/0
+      # Points to Vascular's Redis so Airflow can dispatch tasks to Vascular workers
+      - VASCULAR_CELERY_BROKER_URL=redis://vascular-redis:6379/0
       - AIRFLOW__CORE__FERNET_KEY=
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
