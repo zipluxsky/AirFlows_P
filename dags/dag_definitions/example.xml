@@ -2,10 +2,12 @@
 <!--
   Example DAG definitions. Copy this file or add new .xml files here.
   Each <dag> creates one Airflow DAG that triggers an HTTP request on schedule.
+  Optional: manage DAG tags via tags="a,b,c" or <tags><tag>a</tag><tag>b</tag></tags>
 -->
 <dags>
   <!-- Daily GET at 08:00 UTC -->
-  <dag id="example_daily_get" schedule="0 8 * * *" description="Daily GET example">
+  <dag id="example_daily_get" schedule="0 8 * * *" description="Daily GET example"
+       tags="example,http,daily">
     <trigger url="https://httpbin.org/get" method="get">
       <params>
         <param name="foo">bar</param>

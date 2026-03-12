@@ -15,8 +15,10 @@
 <dags>
 
   <!-- ===== Weekday 06:00 ===== -->
+  <!-- tags: use attribute tags="a,b,c" and/or <tags><tag>a</tag></tags> -->
   <dag id="vascular_fcp_wd_0600" schedule="0 6 * * 1-5"
-       description="FC pipeline – weekday 06:00">
+       description="FC pipeline – weekday 06:00"
+       tags="vascular,fc,weekday,morning">
     <pipeline poke_interval="15" timeout="3600" startup_timeout="120">
       <step task="fc_prepare_config">
         <kwargs>

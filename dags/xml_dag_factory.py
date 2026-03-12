@@ -397,6 +397,31 @@ def _parse_trigger(trigger: ET.Element) -> dict[str, Any]:
     }
 
 
+def _parse_dag_tags(dag_el: ET.Element) -> list[str]:
+    """Parse tags from <dag>: attribute tags=\"a,b,c\" and/or <tags><tag>a</tag>...</tags>."""
+    result: list[str] = []
+    # Attribute: tags="vascular,fc,production"
+    tags_attr = (dag_el.get("tags") or "").strip()
+    if tags_attr:
+        result.extend(t.strip() for t in tags_attr.split(",") if t.strip())
+    # Child: <tags><tag>vascular</tag><tag>fc</tag></tags>
+    tags_el = dag_el.find("tags")
+    if tags_el is not None:
+        for tag_el in tags_el.findall("tag"):
+            if tag_el.text and tag_el.text.strip():
+                result.append(tag_el.text.strip())
+    # Dedupe preserving order; always mark as xml-generated
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in result:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    if "xml-generated" not in seen:
+        out.append("xml-generated")
+    return out
+
+
 def create_dag_from_xml_element(dag_el: ET.Element, source_file: str) -> DAG | None:
     """
     Create a single DAG from a <dag> XML element.
@@ -411,6 +436,8 @@ def create_dag_from_xml_element(dag_el: ET.Element, source_file: str) -> DAG | N
         description = description.text.strip()
     elif not isinstance(description, str):
         description = f"Generated from XML ({source_file})"
+
+    dag_tags = _parse_dag_tags(dag_el)
 
     pipeline_el = dag_el.find("pipeline")
     trigger_el = dag_el.find("trigger")
@@ -427,7 +454,7 @@ def create_dag_from_xml_element(dag_el: ET.Element, source_file: str) -> DAG | N
         default_args=DEFAULT_ARGS,
         schedule=schedule,
         start_date=days_ago(1),
-        tags=["xml-generated"],
+        tags=dag_tags,
         doc_md=description,
     )
 
