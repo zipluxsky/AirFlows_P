@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Option A (recommended for production): Trigger Vascular via HTTP.
+  Vascular uses its own Redis; Airflow calls POST /api/v1/communicators/process,
+  and the API enqueues the Celery task on Vascular's broker.
+  No VASCULAR_CELERY_BROKER_URL needed. Use vascular-api:8000 when on same Docker network.
+-->
+<dags>
+  <dag id="vascular_process_via_http" schedule="0 8 * * *" description="Vascular communicator processing via HTTP (Option A)">
+    <trigger url="http://vascular-api:8000/api/v1/communicators/process" method="post"/>
+  </dag>
+  <dag id="vascular_trigger_upload_document_via_http" schedule="0 9 * * *" description="Vascular upload_document via HTTP (Option A)">
+    <trigger url="http://vascular-api:8000/api/v1/front-office/trigger-upload-document" method="post">
+      <body type="json">{"document_type": "general"}</body>
+    </trigger>
+  </dag>
+</dags>

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Example: DAGs that call Vascular Celery tasks by router function names (Option B).
-  Task names match project/app/api/routers: trigger_processing, upload_document.
-  Requires VASCULAR_CELERY_BROKER_URL (or shared Redis) and Vascular workers on the same broker.
+  Option B: DAGs that call Vascular Celery tasks directly (shared broker).
+  For production, prefer Option A (HTTP): use vascular_http_example.xml instead.
+  Task names: trigger_processing, upload_document. Requires VASCULAR_CELERY_BROKER_URL (or shared Redis).
 -->
 <dags>
   <!-- Router name: communicators.trigger_processing -> runs process_communicator_files -->
