@@ -4,10 +4,19 @@
   Each step is a separate Celery task; intermediate data flows through Redis
   (PipelineContext).  Airflow UI shows 12 tasks (6 send + 6 sensor).
   Requires VASCULAR_CELERY_BROKER_URL pointing to the shared Redis broker.
+
+  Schedule groups (mirrored from Windows Task Scheduler):
+    _wd_0600     : 06:00           Mon-Fri
+    _wd_07       : 07:04/07:16/07:31 Mon-Fri
+    _wd_0900     : 09:00           Mon-Fri
+    _wd_pm       : 13:10-18:40 every 30 min Mon-Fri
+    _sun         : 05:30           Sunday
 -->
 <dags>
-  <dag id="vascular_fc_pipeline" schedule="0 8 * * *"
-       description="File Confirmation 6-step pipeline via Celery">
+
+  <!-- ===== Weekday 06:00 ===== -->
+  <dag id="vascular_fcp_wd_0600" schedule="0 6 * * 1-5"
+       description="FC pipeline – weekday 06:00">
     <pipeline poke_interval="15" timeout="3600" startup_timeout="120">
       <step task="fc_prepare_config">
         <kwargs>
@@ -26,4 +35,93 @@
       <step task="fc_send_email"/>
     </pipeline>
   </dag>
+
+  <!-- ===== Weekday 07:04 / 07:16 / 07:31 ===== -->
+  <dag id="vascular_fcp_wd_07" schedule="4,16,31 7 * * 1-5"
+       description="FC pipeline – weekday 07:04, 07:16, 07:31">
+    <pipeline poke_interval="15" timeout="3600" startup_timeout="120">
+      <step task="fc_prepare_config">
+        <kwargs>
+          <param name="trade_date">{{ ds_nodash }}</param>
+          <param name="cpty">all</param>
+          <param name="by">email</param>
+          <param name="env">prod</param>
+          <param name="versioning">1</param>
+          <param name="send_file">true</param>
+        </kwargs>
+      </step>
+      <step task="fc_prepare_sql"/>
+      <step task="fc_run_query" timeout="1800"/>
+      <step task="fc_parse_data"/>
+      <step task="fc_generate_report" timeout="1800"/>
+      <step task="fc_send_email"/>
+    </pipeline>
+  </dag>
+
+  <!-- ===== Weekday 09:00 ===== -->
+  <dag id="vascular_fcp_wd_0900" schedule="0 9 * * 1-5"
+       description="FC pipeline – weekday 09:00">
+    <pipeline poke_interval="15" timeout="3600" startup_timeout="120">
+      <step task="fc_prepare_config">
+        <kwargs>
+          <param name="trade_date">{{ ds_nodash }}</param>
+          <param name="cpty">all</param>
+          <param name="by">email</param>
+          <param name="env">prod</param>
+          <param name="versioning">1</param>
+          <param name="send_file">true</param>
+        </kwargs>
+      </step>
+      <step task="fc_prepare_sql"/>
+      <step task="fc_run_query" timeout="1800"/>
+      <step task="fc_parse_data"/>
+      <step task="fc_generate_report" timeout="1800"/>
+      <step task="fc_send_email"/>
+    </pipeline>
+  </dag>
+
+  <!-- ===== Weekday afternoon: every 30 min at :10/:40, 13:10-18:40 ===== -->
+  <dag id="vascular_fcp_wd_pm" schedule="10,40 13-18 * * 1-5"
+       description="FC pipeline – weekday 13:10-18:40 every 30 min">
+    <pipeline poke_interval="15" timeout="3600" startup_timeout="120">
+      <step task="fc_prepare_config">
+        <kwargs>
+          <param name="trade_date">{{ ds_nodash }}</param>
+          <param name="cpty">all</param>
+          <param name="by">email</param>
+          <param name="env">prod</param>
+          <param name="versioning">1</param>
+          <param name="send_file">true</param>
+        </kwargs>
+      </step>
+      <step task="fc_prepare_sql"/>
+      <step task="fc_run_query" timeout="1800"/>
+      <step task="fc_parse_data"/>
+      <step task="fc_generate_report" timeout="1800"/>
+      <step task="fc_send_email"/>
+    </pipeline>
+  </dag>
+
+  <!-- ===== Sunday 05:30 ===== -->
+  <dag id="vascular_fcp_sun" schedule="30 5 * * 0"
+       description="FC pipeline – Sunday 05:30">
+    <pipeline poke_interval="15" timeout="3600" startup_timeout="120">
+      <step task="fc_prepare_config">
+        <kwargs>
+          <param name="trade_date">{{ ds_nodash }}</param>
+          <param name="cpty">all</param>
+          <param name="by">email</param>
+          <param name="env">prod</param>
+          <param name="versioning">1</param>
+          <param name="send_file">true</param>
+        </kwargs>
+      </step>
+      <step task="fc_prepare_sql"/>
+      <step task="fc_run_query" timeout="1800"/>
+      <step task="fc_parse_data"/>
+      <step task="fc_generate_report" timeout="1800"/>
+      <step task="fc_send_email"/>
+    </pipeline>
+  </dag>
+
 </dags>

@@ -4,10 +4,19 @@
   wait="true" enables idempotent dispatch, circuit breaker, trace context,
   and result polling via CeleryResultSensor (reschedule mode).
   Requires VASCULAR_CELERY_BROKER_URL pointing to the shared Redis broker.
+
+  Schedule groups (mirrored from Windows Task Scheduler):
+    _wd_0600     : 06:00           Mon-Fri
+    _wd_07       : 07:04/07:16/07:31 Mon-Fri
+    _wd_0900     : 09:00           Mon-Fri
+    _wd_pm       : 13:10-18:40 every 30 min Mon-Fri
+    _sun         : 05:30           Sunday
 -->
 <dags>
-  <dag id="vascular_file_confirmation" schedule="0 8 * * *"
-       description="Vascular File Confirmation report via Celery (send + sensor)">
+
+  <!-- ===== Weekday 06:00 ===== -->
+  <dag id="vascular_fc_wd_0600" schedule="0 6 * * 1-5"
+       description="FC single-step – weekday 06:00">
     <trigger type="celery" task="file_confirmation"
              wait="true" poke_interval="30" timeout="3600" startup_timeout="300">
       <kwargs>
@@ -20,4 +29,69 @@
       </kwargs>
     </trigger>
   </dag>
+
+  <!-- ===== Weekday 07:04 / 07:16 / 07:31 ===== -->
+  <dag id="vascular_fc_wd_07" schedule="4,16,31 7 * * 1-5"
+       description="FC single-step – weekday 07:04, 07:16, 07:31">
+    <trigger type="celery" task="file_confirmation"
+             wait="true" poke_interval="30" timeout="3600" startup_timeout="300">
+      <kwargs>
+        <param name="trade_date">{{ ds_nodash }}</param>
+        <param name="cpty">all</param>
+        <param name="by">email</param>
+        <param name="env">prod</param>
+        <param name="versioning">1</param>
+        <param name="send_file">true</param>
+      </kwargs>
+    </trigger>
+  </dag>
+
+  <!-- ===== Weekday 09:00 ===== -->
+  <dag id="vascular_fc_wd_0900" schedule="0 9 * * 1-5"
+       description="FC single-step – weekday 09:00">
+    <trigger type="celery" task="file_confirmation"
+             wait="true" poke_interval="30" timeout="3600" startup_timeout="300">
+      <kwargs>
+        <param name="trade_date">{{ ds_nodash }}</param>
+        <param name="cpty">all</param>
+        <param name="by">email</param>
+        <param name="env">prod</param>
+        <param name="versioning">1</param>
+        <param name="send_file">true</param>
+      </kwargs>
+    </trigger>
+  </dag>
+
+  <!-- ===== Weekday afternoon: every 30 min at :10/:40, 13:10-18:40 ===== -->
+  <dag id="vascular_fc_wd_pm" schedule="10,40 13-18 * * 1-5"
+       description="FC single-step – weekday 13:10-18:40 every 30 min">
+    <trigger type="celery" task="file_confirmation"
+             wait="true" poke_interval="30" timeout="3600" startup_timeout="300">
+      <kwargs>
+        <param name="trade_date">{{ ds_nodash }}</param>
+        <param name="cpty">all</param>
+        <param name="by">email</param>
+        <param name="env">prod</param>
+        <param name="versioning">1</param>
+        <param name="send_file">true</param>
+      </kwargs>
+    </trigger>
+  </dag>
+
+  <!-- ===== Sunday 05:30 ===== -->
+  <dag id="vascular_fc_sun" schedule="30 5 * * 0"
+       description="FC single-step – Sunday 05:30">
+    <trigger type="celery" task="file_confirmation"
+             wait="true" poke_interval="30" timeout="3600" startup_timeout="300">
+      <kwargs>
+        <param name="trade_date">{{ ds_nodash }}</param>
+        <param name="cpty">all</param>
+        <param name="by">email</param>
+        <param name="env">prod</param>
+        <param name="versioning">1</param>
+        <param name="send_file">true</param>
+      </kwargs>
+    </trigger>
+  </dag>
+
 </dags>
