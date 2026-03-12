@@ -133,8 +133,9 @@ def _celery_trigger_with_xcom(
     # --- inject trace context ---
     dag_run = context.get("dag_run")
     ti = context.get("ti")
+    dag_obj = context.get("dag")
     resolved_kwargs["_trace"] = {
-        "dag_id": context.get("dag", getattr(dag_run, "dag_id", "unknown")),
+        "dag_id": getattr(dag_obj, "dag_id", None) or getattr(dag_run, "dag_id", "unknown"),
         "dag_run_id": getattr(dag_run, "run_id", "unknown"),
         "execution_date": str(context.get("execution_date", "")),
         "task_instance": getattr(ti, "task_id", "unknown"),
@@ -266,8 +267,9 @@ def _pipeline_celery_trigger(
         else:
             resolved_kwargs[k] = v
 
+    dag_obj = context.get("dag")
     resolved_kwargs["_trace"] = {
-        "dag_id": context.get("dag", getattr(dag_run, "dag_id", "unknown")),
+        "dag_id": getattr(dag_obj, "dag_id", None) or getattr(dag_run, "dag_id", "unknown"),
         "dag_run_id": run_id,
         "execution_date": str(context.get("execution_date", "")),
         "task_instance": getattr(ti, "task_id", "unknown"),
