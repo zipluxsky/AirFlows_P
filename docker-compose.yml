@@ -11,6 +11,8 @@ services:
       - airflow-config:/opt/airflow/config
       - airflow-plugins:/opt/airflow/plugins
     environment:
+      - TZ=Asia/Hong_Kong
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=Asia/Hong_Kong
       - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
@@ -38,6 +40,8 @@ services:
       - airflow-config:/opt/airflow/config
       - airflow-plugins:/opt/airflow/plugins
     environment:
+      - TZ=Asia/Hong_Kong
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=Asia/Hong_Kong
       - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
@@ -63,6 +67,8 @@ services:
       - airflow-config:/opt/airflow/config
       - airflow-plugins:/opt/airflow/plugins
     environment:
+      - TZ=Asia/Hong_Kong
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=Asia/Hong_Kong
       - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
@@ -92,6 +98,8 @@ services:
       - airflow-config:/opt/airflow/config
       - airflow-plugins:/opt/airflow/plugins
     environment:
+      - TZ=Asia/Hong_Kong
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=Asia/Hong_Kong
       - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CORE__FERNET_KEY=
@@ -105,6 +113,7 @@ services:
   postgres:
     image: postgres:15
     environment:
+      TZ: Asia/Hong_Kong
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
@@ -120,6 +129,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    environment:
+      - TZ=Asia/Hong_Kong
     networks:
       - airflow_shared_net
     restart: unless-stopped
