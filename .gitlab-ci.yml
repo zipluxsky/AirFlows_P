@@ -68,6 +68,14 @@ deploy:
           -v "${COMPOSE_PROJECT_NAME}_airflow-dags:/opt/airflow/dags" \
           -v "${CI_PROJECT_DIR}/dags:/source:ro" \
           alpine sh -c "find /opt/airflow/dags -mindepth 1 -delete && cp -r /source/. /opt/airflow/dags/"
+        if [ -d "${CI_PROJECT_DIR}/plugins" ]; then
+          echo "Syncing plugins..."
+          sudo docker volume create "${COMPOSE_PROJECT_NAME}_airflow-plugins" 2>/dev/null || true
+          sudo docker run --rm \
+            -v "${COMPOSE_PROJECT_NAME}_airflow-plugins:/opt/airflow/plugins" \
+            -v "${CI_PROJECT_DIR}/plugins:/source:ro" \
+            alpine sh -c "find /opt/airflow/plugins -mindepth 1 -delete 2>/dev/null; cp -r /source/. /opt/airflow/plugins/"
+        fi
       else
         echo "Full deploy (compose pull + up -d)."
         cd "${DEPLOY_PATH}" && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" pull && sudo docker compose --project-name "${COMPOSE_PROJECT_NAME}" up -d
@@ -78,6 +86,14 @@ deploy:
             -v "${COMPOSE_PROJECT_NAME}_airflow-dags:/opt/airflow/dags" \
             -v "${CI_PROJECT_DIR}/dags:/source:ro" \
             alpine sh -c "find /opt/airflow/dags -mindepth 1 -delete && cp -r /source/. /opt/airflow/dags/"
+        fi
+        if [ -d "${CI_PROJECT_DIR}/plugins" ]; then
+          echo "Syncing plugins..."
+          sudo docker volume create "${COMPOSE_PROJECT_NAME}_airflow-plugins" 2>/dev/null || true
+          sudo docker run --rm \
+            -v "${COMPOSE_PROJECT_NAME}_airflow-plugins:/opt/airflow/plugins" \
+            -v "${CI_PROJECT_DIR}/plugins:/source:ro" \
+            alpine sh -c "find /opt/airflow/plugins -mindepth 1 -delete 2>/dev/null; cp -r /source/. /opt/airflow/plugins/"
         fi
       fi
   only:

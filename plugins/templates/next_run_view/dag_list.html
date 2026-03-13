@@ -1,0 +1,48 @@
+{% extends "airflow/main.html" %}
+{% block head_css %}
+{{ super() }}
+<style>
+  .next-run-table { margin-top: 1em; }
+  .next-run-table th, .next-run-table td { padding: 0.5em 1em; text-align: left; }
+  .next-run-table th { background: #f0f0f0; }
+  .next-run-table tr:nth-child(even) { background: #fafafa; }
+  .paused-yes { color: #999; }
+  .paused-no { color: #0a0; }
+</style>
+{% endblock %}
+{% block content %}
+<h2>DAG 列表（執行時間）</h2>
+<p>此頁面顯示 <strong>下次實際執行時間</strong> (next_dagrun_create_after)，而非資料區間起點。</p>
+<table class="next-run-table table table-bordered">
+  <thead>
+    <tr>
+      <th>DAG ID</th>
+      <th>Paused</th>
+      <th>下次執行時間</th>
+      <th>資料區間起（對照）</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dag in dags %}
+    <tr>
+      <td><a href="/dags/{{ dag.dag_id }}/grid">{{ dag.dag_id }}</a></td>
+      <td class="{{ 'paused-yes' if dag.is_paused else 'paused-no' }}">{{ 'Yes' if dag.is_paused else 'No' }}</td>
+      <td>
+        {% if dag.next_run_time %}
+          {{ dag.next_run_time.strftime('%Y-%m-%d %H:%M:%S') }} UTC
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>
+        {% if dag.data_interval_start %}
+          {{ dag.data_interval_start.strftime('%Y-%m-%d %H:%M:%S') }} UTC
+        {% else %}
+          —
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
