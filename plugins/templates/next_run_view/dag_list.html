@@ -29,14 +29,14 @@
       <td class="{{ 'paused-yes' if dag.is_paused else 'paused-no' }}">{{ 'Yes' if dag.is_paused else 'No' }}</td>
       <td>
         {% if dag.next_run_time %}
-          {{ dag.next_run_time.strftime('%Y-%m-%d %H:%M:%S') }} UTC
+          {{ dag.next_run_time.strftime('%Y-%m-%d %H:%M:%S') }} HKT
         {% else %}
           —
         {% endif %}
       </td>
       <td>
         {% if dag.data_interval_start %}
-          {{ dag.data_interval_start.strftime('%Y-%m-%d %H:%M:%S') }} UTC
+          {{ dag.data_interval_start.strftime('%Y-%m-%d %H:%M:%S') }} HKT
         {% else %}
           —
         {% endif %}

@@ -13,6 +13,7 @@ services:
     environment:
       - TZ=Asia/Hong_Kong
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=Asia/Hong_Kong
+      - AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE=Asia/Hong_Kong
       - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow

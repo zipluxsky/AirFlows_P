@@ -4,7 +4,17 @@ from __future__ import annotations
 from flask_appbuilder import BaseView, expose
 
 from airflow.models.dag import DagModel
+from airflow.utils import timezone
 from airflow.utils.session import provide_session
+
+
+def _to_hkt(dt):
+    """Convert datetime to Hong Kong timezone. Handles None and naive datetimes."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = timezone.make_aware(dt, timezone.UTC)
+    return dt.astimezone(timezone.parse_timezone("Asia/Hong_Kong"))
 
 
 class NextRunView(BaseView):
@@ -39,8 +49,8 @@ class NextRunView(BaseView):
             {
                 "dag_id": r.dag_id,
                 "is_paused": r.is_paused,
-                "next_run_time": r.next_dagrun_create_after,
-                "data_interval_start": r.next_dagrun_data_interval_start,
+                "next_run_time": _to_hkt(r.next_dagrun_create_after),
+                "data_interval_start": _to_hkt(r.next_dagrun_data_interval_start),
             }
             for r in rows
         ]
