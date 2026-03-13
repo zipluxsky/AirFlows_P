@@ -9,12 +9,15 @@ from airflow.utils.session import provide_session
 
 
 def _to_hkt(dt):
-    """Convert datetime to Hong Kong timezone. Handles None and naive datetimes."""
+    """Convert datetime to Hong Kong timezone. Handles None, naive datetimes, and edge cases."""
     if dt is None:
         return None
-    if dt.tzinfo is None:
-        dt = timezone.make_aware(dt, timezone.UTC)
-    return dt.astimezone(timezone.parse_timezone("Asia/Hong_Kong"))
+    try:
+        if getattr(dt, "tzinfo", None) is None:
+            dt = timezone.make_aware(dt, timezone.UTC)
+        return dt.astimezone(timezone.parse_timezone("Asia/Hong_Kong"))
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 class NextRunView(BaseView):
